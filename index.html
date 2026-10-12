@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Interactive 3D human anatomy explorer MVP with real segmented anatomy models."
+    />
+    <title>Anatomy Explorer MVP</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.180.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.180.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <div>
+            <h1>Anatomy Explorer</h1>
+            <p>Segmented 3D anatomy MVP</p>
+          </div>
+        </div>
+        <div class="search-wrap">
+          <label class="sr-only" for="searchInput">Search anatomical structures</label>
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Search femur, calcaneal tendon, ACL..."
+            autocomplete="off"
+          />
+          <div id="searchResults" class="search-results" role="listbox"></div>
+        </div>
+        <button id="fitButton" class="icon-button" type="button" title="Fit body in view" aria-label="Fit body in view">
+          Fit
+        </button>
+      </header>
+
+      <main class="workspace">
+        <aside class="panel left-panel" aria-label="Anatomy layers and structure list">
+          <section>
+            <div class="section-heading">
+              <h2>Layers</h2>
+              <span id="assetStatus">Loading data</span>
+            </div>
+            <div class="layer-list" id="layerList"></div>
+          </section>
+
+          <section class="structure-section">
+            <div class="section-heading">
+              <h2>Loaded Structures</h2>
+              <span id="structureCount">0</span>
+            </div>
+            <div id="structureList" class="structure-list" aria-live="polite"></div>
+          </section>
+        </aside>
+
+        <section class="viewer-card" aria-label="3D anatomy viewer">
+          <canvas id="viewerCanvas"></canvas>
+          <div id="loadingOverlay" class="loading-overlay">
+            <div class="spinner" aria-hidden="true"></div>
+            <p id="loadingText">Preparing anatomy viewer...</p>
+          </div>
+          <div class="view-toolbar" aria-label="Preset views">
+            <button type="button" data-view="front">Front</button>
+            <button type="button" data-view="left">Left</button>
+            <button type="button" data-view="back">Back</button>
+            <button type="button" data-view="top">Top</button>
+          </div>
+          <div class="control-help">
+            <span>Drag to rotate</span>
+            <span>Scroll or pinch to zoom</span>
+            <span>Click a structure</span>
+          </div>
+        </section>
+
+        <aside class="panel right-panel" aria-label="Selected anatomy information">
+          <section id="detailsPanel" class="details-panel">
+            <p class="eyebrow">Selection</p>
+            <h2>Select a structure</h2>
+            <p class="muted">
+              Click the 3D model or search by name to highlight a bone, muscle, tendon, or joint structure.
+            </p>
+          </section>
+
+          <section class="actions-panel">
+            <button id="isolateButton" type="button" disabled>Isolate</button>
+            <button id="ghostButton" type="button" disabled>Ghost others</button>
+            <button id="showAllButton" type="button">Show all</button>
+          </section>
+
+          <section class="license-panel">
+            <h2>Data & License</h2>
+            <p>
+              Models are derived from BodyParts3D and Z-Anatomy. Definitions are from Wikipedia-derived
+              metadata. Attribution and share-alike terms apply.
+            </p>
+            <a href="./public/anatomy/licenses/NOTICE.nqwrc-3d-anatomy.txt">View notices</a>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
