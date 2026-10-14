@@ -10,6 +10,7 @@
   --amber: #f2b84b;
   --red: #ef6a63;
   --blue: #79a8ff;
+  --bone: #e7e1d0;
   --shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
 }
 
@@ -184,6 +185,7 @@ button:disabled {
 .workspace {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr) 350px;
+  height: calc(100vh - 71px);
   min-height: 0;
 }
 
@@ -354,15 +356,20 @@ section + section {
 }
 
 .view-toolbar,
+.zoom-bone-hint,
 .control-help {
   position: absolute;
+  z-index: 8;
+  pointer-events: none;
+}
+
+.view-toolbar,
+.control-help {
   left: 18px;
   right: 18px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  z-index: 8;
-  pointer-events: none;
 }
 
 .view-toolbar {
@@ -380,6 +387,31 @@ section + section {
 
 .view-toolbar button:hover {
   border-color: var(--teal);
+}
+
+.zoom-bone-hint {
+  top: 18px;
+  right: 18px;
+  max-width: 190px;
+  padding: 8px 11px;
+  border: 1px solid rgba(231, 225, 208, 0.48);
+  border-radius: 8px;
+  background: rgba(36, 32, 26, 0.88);
+  color: var(--bone);
+  font-size: 12px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity 160ms ease,
+    visibility 160ms ease,
+    transform 160ms ease;
+}
+
+.zoom-bone-hint.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
 .control-help {
@@ -515,6 +547,7 @@ section + section {
 
   .workspace {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .panel,
@@ -548,5 +581,11 @@ section + section {
   .detail-row {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .zoom-bone-hint {
+    left: 18px;
+    right: auto;
+    top: 66px;
   }
 }

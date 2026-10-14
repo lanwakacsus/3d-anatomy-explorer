@@ -6,6 +6,16 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 const ASSET_ROOT = "./public/anatomy";
 const RELEVANT_SYSTEMS = ["skeletal", "muscular", "joints"];
 const TENDON_PATTERN = /tendon|aponeurosis|retinaculum|sheath/i;
+const CLOSE_BONE_VIEW_DISTANCE = 1.18;
+const MUSCLE_DETAIL_COLOR = new THREE.Color(0x350e12);
+const MUSCLE_COLORS = [
+  new THREE.Color(0xc83f38),
+  new THREE.Color(0xd75548),
+  new THREE.Color(0xb93443),
+  new THREE.Color(0xe66a55),
+  new THREE.Color(0xa93438),
+  new THREE.Color(0xd24f62),
+];
 
 const layers = {
   bones: {
@@ -52,6 +62,7 @@ const state = {
   selectedId: null,
   isolatedId: null,
   ghostMode: false,
+  closeBoneView: false,
   bodyBox: new THREE.Box3(),
 };
 
@@ -70,6 +81,7 @@ const els = {
   ghostButton: document.querySelector("#ghostButton"),
   showAllButton: document.querySelector("#showAllButton"),
   fitButton: document.querySelector("#fitButton"),
+  zoomBoneHint: document.querySelector("#zoomBoneHint"),
 };
 
 const scene = new THREE.Scene();
@@ -210,14 +222,16 @@ function renderLayers() {
   els.layerList.innerHTML = Object.entries(layers)
     .map(([key, layer]) => {
       const count = [...state.structures.values()].filter(layer.matches).length;
+      const autoBone = key === "bones" && state.closeBoneView && !layer.active;
+      const stateLabel = autoBone ? "Auto" : layer.active ? "On" : "Off";
       return `
-        <button class="layer-toggle ${layer.active ? "is-active" : ""}" type="button" data-layer="${key}">
+        <button class="layer-toggle ${layer.active || autoBone ? "is-active" : ""}" type="button" data-layer="${key}">
           <span class="layer-swatch" style="background:${layer.color}"></span>
           <span>
             <span class="layer-title">${layer.label}</span>
             <span class="layer-meta">${layer.description} - ${count.toLocaleString()}</span>
           </span>
-          <span class="layer-state">${layer.active ? "On" : "Off"}</span>
+          <span class="layer-state">${stateLabel}</span>
         </button>
       `;
     })
@@ -226,8 +240,7 @@ function renderLayers() {
 
 function renderStructureList() {
   const activeItems = [...state.structures.values()]
-    .filter((item) => layers[item.category].active)
-    .slice(0, 120);
+    .filter((item) => layers[item.category].active);
 
   els.structureCount.textContent = activeItems.length.toLocaleString();
   els.structureList.innerHTML = activeItems
@@ -294,7 +307,10 @@ function registerMeshes(root, system) {
       material.userData.baseOpacity = material.opacity ?? 1;
       material.userData.baseColor = material.color?.clone();
       material.userData.baseEmissive = material.emissive?.clone();
+      applyDetailedMaterial(material, item, id);
     });
+
+    addMuscleDetailOverlay(object, item, id);
 
     if (!state.meshesById.has(id)) {
       state.meshesById.set(id, []);
@@ -335,29 +351,96 @@ function forEachMaterial(material, callback) {
   materials.forEach(callback);
 }
 
+function applyDetailedMaterial(material, item, id) {
+  if (!item || !material.color) return;
+
+  if (item.category === "muscles") {
+    material.color.copy(muscleColorFor(id));
+    material.roughness = 0.72;
+    material.metalness = 0.02;
+    material.userData.baseColor = material.color.clone();
+    material.userData.baseOpacity = Math.min(0.98, material.userData.baseOpacity ?? 1);
+  } else if (item.category === "bones") {
+    material.color.set(0xe7e1d0);
+    material.roughness = 0.86;
+    material.metalness = 0.01;
+    material.userData.baseColor = material.color.clone();
+    material.userData.baseOpacity = Math.min(0.94, material.userData.baseOpacity ?? 1);
+  } else if (item.category === "tendons") {
+    material.color.set(0xf3c46a);
+    material.roughness = 0.8;
+    material.metalness = 0.01;
+    material.userData.baseColor = material.color.clone();
+  }
+}
+
+function muscleColorFor(id) {
+  const hash = [...id].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return MUSCLE_COLORS[hash % MUSCLE_COLORS.length];
+}
+
+function addMuscleDetailOverlay(mesh, item, id) {
+  if (!item || item.category !== "muscles" || !mesh.geometry) return;
+  const edgeGeometry = new THREE.EdgesGeometry(mesh.geometry, 32);
+  const edgeMaterial = new THREE.LineBasicMaterial({
+    color: MUSCLE_DETAIL_COLOR,
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false,
+  });
+  const detailLines = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+  detailLines.name = `${id} muscle striation detail`;
+  detailLines.userData.isMuscleDetail = true;
+  detailLines.renderOrder = 2;
+  mesh.add(detailLines);
+}
+
 function applyVisibility() {
+  updateCloseBoneView();
   anatomyRoot.traverse((object) => {
     if (!object.isMesh) return;
     const id = object.userData.anatomyId;
     const item = state.structures.get(id);
     if (!item) return;
     const layer = layers[item.category];
-    object.visible = layer.active && (!state.isolatedId || id === state.isolatedId);
+    object.visible = shouldShowMesh(id, item, layer);
 
     const shouldGhost = state.ghostMode && state.selectedId && id !== state.selectedId;
-    setMeshGhosted(object, shouldGhost);
+    setMeshGhosted(object, shouldGhost, item);
   });
   highlightSelected();
   renderLayers();
   renderStructureList();
 }
 
-function setMeshGhosted(mesh, ghosted) {
+function shouldShowMesh(id, item, layer) {
+  if (state.isolatedId) return id === state.isolatedId;
+  if (state.closeBoneView && item.category === "bones") return true;
+  return layer.active;
+}
+
+function setMeshGhosted(mesh, ghosted, item) {
+  const closeBoneMuscle = state.closeBoneView && item.category === "muscles" && !state.selectedId;
+  const closeBoneSelectedMuscle =
+    state.closeBoneView && item.category === "muscles" && state.selectedId !== mesh.userData.anatomyId;
   forEachMaterial(mesh.material, (material) => {
     const baseOpacity = material.userData.baseOpacity ?? 1;
-    material.opacity = ghosted ? Math.min(0.16, baseOpacity) : baseOpacity;
-    material.depthWrite = !ghosted;
+    let opacity = baseOpacity;
+    if (ghosted) opacity = Math.min(0.16, baseOpacity);
+    else if (closeBoneSelectedMuscle) opacity = Math.min(0.2, baseOpacity);
+    else if (closeBoneMuscle) opacity = Math.min(0.34, baseOpacity);
+    material.opacity = opacity;
+    material.depthWrite = opacity > 0.42;
   });
+  setMuscleDetailOpacity(mesh, ghosted ? 0.08 : state.closeBoneView ? 0.16 : 0.22);
+}
+
+function setMuscleDetailOpacity(mesh, opacity) {
+  for (const child of mesh.children) {
+    if (!child.userData.isMuscleDetail) continue;
+    child.material.opacity = opacity;
+    child.visible = opacity > 0;
+  }
 }
 
 function highlightSelected() {
@@ -371,10 +454,26 @@ function highlightSelected() {
       if (material.emissive) {
         material.emissive.copy(highlighted ? new THREE.Color(0x5a3a00) : material.userData.baseEmissive || new THREE.Color(0x000000));
       }
-      material.opacity = highlighted ? 1 : material.opacity;
-      material.depthWrite = highlighted ? true : material.depthWrite;
+      if (highlighted) {
+        material.opacity = 1;
+        material.depthWrite = true;
+      }
     });
   });
+}
+
+function updateCloseBoneView(force = false) {
+  const distance = camera.position.distanceTo(controls.target);
+  const nextCloseBoneView = distance <= CLOSE_BONE_VIEW_DISTANCE && !state.isolatedId;
+  if (!force && nextCloseBoneView === state.closeBoneView) return;
+  state.closeBoneView = nextCloseBoneView;
+  els.zoomBoneHint.classList.toggle("is-visible", state.closeBoneView);
+}
+
+function refreshCloseBoneView() {
+  const wasCloseBoneView = state.closeBoneView;
+  updateCloseBoneView();
+  if (wasCloseBoneView !== state.closeBoneView) applyVisibility();
 }
 
 function wireUi() {
@@ -447,6 +546,8 @@ function wireUi() {
   });
 
   els.fitButton.addEventListener("click", frameBody);
+
+  controls.addEventListener("change", refreshCloseBoneView);
 }
 
 function renderSearchResults(query) {
@@ -676,6 +777,7 @@ function resize() {
 
 function render() {
   controls.update();
+  refreshCloseBoneView();
   renderer.render(scene, camera);
 }
 
